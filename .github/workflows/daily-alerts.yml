@@ -1,0 +1,27 @@
+name: Alerta diário de documentos da frota
+
+on:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar firebase-admin
+        run: npm install firebase-admin --no-save
+
+      - name: Rodar script de alertas
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          ALERT_SENDER_EMAIL: ${{ vars.ALERT_SENDER_EMAIL }}
+          ALERT_RECIPIENTS: ${{ vars.ALERT_RECIPIENTS }}
+        run: node scripts/sendAlerts.mjs
