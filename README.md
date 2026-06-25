@@ -86,21 +86,57 @@ Ninguém aprova o primeiro usuário, então esse passo é manual:
 
 ```
 src/services/
-  storageAdapter.js          <- ponto único de seleção (lê VITE_STORAGE_PROVIDER)
-  firebaseStorageAdapter.js  <- upload/download no Firebase Storage
-  sharepointAuth.js          <- login MSAL + token do Microsoft Graph
-  sharepointStorageAdapter.js<- upload/download via Graph API (SharePoint)
-  firestoreService.js        <- metadados + gestão de usuários (sempre Firestore)
-  dataSource.js               <- decide mock vs. real conforme .env
+  storageAdapter.js           <- ponto único de seleção (lê VITE_STORAGE_PROVIDER)
+  cloudinaryStorageAdapter.js <- upload/download no Cloudinary (PADRÃO - grátis, sem cartão)
+  firebaseStorageAdapter.js   <- upload/download no Firebase Storage (precisa de cartão desde fev/2026)
+  sharepointAuth.js           <- login MSAL + token do Microsoft Graph
+  sharepointStorageAdapter.js <- upload/download via Graph API (SharePoint, depende do TI)
+  firestoreService.js         <- metadados + gestão de usuários (sempre Firestore)
+  dataSource.js                <- decide mock vs. real conforme .env
 ```
 
-### Rota A — Firebase Storage (pronta agora)
-Não depende de aprovação de TI. Limite do tier gratuito: 5GB armazenados,
-1GB/dia de download.
+### Rota A — Cloudinary (padrão, recomendada, sem cartão)
 
-### Rota B — SharePoint via Microsoft Graph (depende do TI)
-Ver seção detalhada de setup mais abaixo — exige app registration no Azure AD
-e aprovação dos escopos `Files.ReadWrite` e `Sites.ReadWrite.All`.
+Setup:
+1. Crie uma conta gratuita em [cloudinary.com](https://cloudinary.com) (login
+   com Google ou GitHub funciona, sem pedir cartão).
+2. No Dashboard, anote o **Cloud name** (aparece no topo).
+3. Vá em **Settings → Upload → Upload presets → Add upload preset**.
+4. Em **Signing Mode**, escolha **Unsigned** (necessário pra upload direto do
+   navegador sem expor nenhuma chave secreta). Salve e anote o nome do preset.
+5. Preencha no `.env`: `VITE_CLOUDINARY_CLOUD_NAME` e
+   `VITE_CLOUDINARY_UPLOAD_PRESET`. Deixe `VITE_STORAGE_PROVIDER=cloudinary`
+   (já é o padrão).
+
+**Limite real do plano gratuito**: 25 créditos/mês (1 crédito ≈ 1GB de
+armazenamento OU 1GB de banda — os dois consomem do mesmo bolso). Se passar,
+a conta **suspende temporariamente**, não cobra automaticamente — então não
+tem risco de fatura surpresa, só de upload parar de funcionar até o mês virar
+ou você reduzir uso.
+
+**Limitação atual do adapter**: exclusão de arquivo não está implementada
+(precisaria de chamada assinada com a API secret, que não pode ficar no
+navegador). Pra excluir um arquivo enviado por engano, use o Cloudinary
+Console (Media Library) direto.
+
+**Nota de segurança**: assim como no Firebase Storage, a URL pública de um
+arquivo do Cloudinary funciona sem precisar estar logado no portal — a
+proteção real está em quem tem acesso a essas URLs (Firestore + login),
+não no storage em si. Não é uma fraqueza exclusiva do Cloudinary.
+
+### Rota B — Firebase Storage (precisa de cartão desde fev/2026)
+
+A Google passou a exigir o plano **Blaze** (pay-as-you-go) pra usar o Cloud
+Storage, mesmo que o uso fique em R$0 dentro da cota gratuita (5GB
+armazenados, 1GB/dia de download). Se preferir essa rota mesmo assim — por
+exemplo, se já usa Blaze em outro projeto Mills — troque
+`VITE_STORAGE_PROVIDER=firebase` e vincule uma conta de faturamento no
+Console (Configurações do projeto → Uso e faturamento).
+
+### Rota C — SharePoint via Microsoft Graph (depende do TI)
+
+Ver seção detalhada mais abaixo — exige app registration no Azure AD e
+aprovação dos escopos `Files.ReadWrite` e `Sites.ReadWrite.All`.
 
 ## Setup da chave do Gemini (upload com IA)
 
@@ -158,6 +194,10 @@ Certificado de Inspeção, CIV, CIPP, NF de Aquisição, Ficha Técnica,
 - Documentos do Manusis (OS, plano de manutenção) ficam fora do escopo.
 - Alerta por e-mail vai pra uma lista fixa de endereços (variável
   `ALERT_RECIPIENTS`), não por responsável individual do ativo.
+- Storage de arquivos passou a ser **Cloudinary** por padrão (não exige
+  cartão), depois que a Google passou a exigir plano Blaze pro Firebase
+  Storage a partir de fevereiro/2026. Firebase Storage e SharePoint continuam
+  disponíveis como alternativas, trocando uma linha de `.env`.
 
 ## Roadmap / próximos passos
 
