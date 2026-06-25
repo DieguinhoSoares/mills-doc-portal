@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAtivo() {
+      return isSignedIn() && myProfile().status == 'ativo';
+    }
+
+    function myRole() {
+      return myProfile().role;
+    }
+
+    function isMaster() {
+      return isSignedIn() && myProfile().role == 'master' && myProfile().status == 'ativo';
+    }
+
+    function isAnalistaOuAcima() {
+      return isAtivo() && (myRole() == 'analista' || myRole() == 'gestor' || myRole() == 'master');
+    }
+
+    // Qualquer usuário autenticado pode ler/criar o PRÓPRIO documento em /users
+    // (necessário pro fluxo de auto-cadastro pendente). Só o master pode alterar
+    // status/papel de outros usuários.
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isMaster());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isMaster();
+    }
+
+    // Ativos e documentos: leitura liberada pra qualquer usuário ATIVO
+    // (inclui consultante - é exatamente o caso de uso da guia de Consulta).
+    // Escrita só pra analista/gestor/master.
+    match /assets/{assetId} {
+      allow read: if isAtivo();
+      allow write: if isAnalistaOuAcima();
+
+      match /documents/{documentId} {
+        allow read: if isAtivo();
+        allow write: if isAnalistaOuAcima();
+      }
+    }
+  }
+}

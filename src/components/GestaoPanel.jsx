@@ -5,14 +5,14 @@ import { ASSET_TYPE_LABELS } from "../config/categories";
 
 const STATUS_LABEL = {
   [ALERT_STATUS.OK]: "OK",
-  [ALERT_STATUS.VENCENDO]: "Vencendo",
+  [ALERT_STATUS.VENCENDO_15]: "Vence em ≤15 dias",
+  [ALERT_STATUS.VENCENDO_30]: "Vence em ≤30 dias",
   [ALERT_STATUS.VENCIDO]: "Vencido",
   [ALERT_STATUS.FALTANTE]: "Faltante",
 };
 
 export default function GestaoPanel() {
   const [filterCell, setFilterCell] = useState("");
-  const [warningWindow, setWarningWindow] = useState(30);
   const [assets, setAssets] = useState([]);
   const [documentsByAssetId, setDocumentsByAssetId] = useState({});
   const [loading, setLoading] = useState(true);
@@ -41,8 +41,8 @@ export default function GestaoPanel() {
   }, []);
 
   const { summary, detail } = useMemo(
-    () => buildFleetAlertSummary(assets, documentsByAssetId, warningWindow),
-    [assets, documentsByAssetId, warningWindow]
+    () => buildFleetAlertSummary(assets, documentsByAssetId),
+    [assets, documentsByAssetId]
   );
 
   if (loading) return <div className="empty-state">Carregando dados da frota...</div>;
@@ -62,18 +62,22 @@ export default function GestaoPanel() {
         </p>
       )}
 
-      <div className="summary-cards">
+      <div className="summary-cards" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
         <div className="summary-card vencido">
           <div className="number">{summary.vencidos}</div>
-          <div className="label">Ativos com documento vencido</div>
+          <div className="label">Documento vencido</div>
         </div>
         <div className="summary-card vencendo">
-          <div className="number">{summary.vencendo}</div>
-          <div className="label">Vencendo em até {warningWindow} dias</div>
+          <div className="number">{summary.vencendo15}</div>
+          <div className="label">Vencendo em até 15 dias</div>
+        </div>
+        <div className="summary-card vencendo">
+          <div className="number">{summary.vencendo30}</div>
+          <div className="label">Vencendo em até 30 dias</div>
         </div>
         <div className="summary-card faltante">
           <div className="number">{summary.faltantes}</div>
-          <div className="label">Com documento faltante</div>
+          <div className="label">Documento faltante</div>
         </div>
         <div className="summary-card ok">
           <div className="number">{summary.ok}</div>
@@ -87,12 +91,6 @@ export default function GestaoPanel() {
           {cells.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
-        </select>
-        <select value={warningWindow} onChange={(e) => setWarningWindow(Number(e.target.value))}>
-          <option value={15}>Janela de aviso: 15 dias</option>
-          <option value={30}>Janela de aviso: 30 dias</option>
-          <option value={60}>Janela de aviso: 60 dias</option>
-          <option value={90}>Janela de aviso: 90 dias</option>
         </select>
         <button className="btn secondary">Exportar relatório (Excel)</button>
       </div>
@@ -121,7 +119,10 @@ export default function GestaoPanel() {
                     <span className="badge ok">Tudo regularizado</span>
                   ) : (
                     pendencias.map((p) => (
-                      <span key={p.categoryId} className={`badge ${p.status}`}>
+                      <span
+                        key={p.categoryId}
+                        className={`badge ${p.status === ALERT_STATUS.VENCENDO_30 ? "vencendo" : p.status === ALERT_STATUS.VENCENDO_15 ? "vencendo" : p.status}`}
+                      >
                         {p.categoryLabel}: {STATUS_LABEL[p.status]}
                       </span>
                     ))

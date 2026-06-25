@@ -99,6 +99,42 @@ export const DOCUMENT_CATEGORIES = [
     ],
     hasValidity: false,
   },
+  // Autorizações Especiais de Trânsito - exigidas pra transporte de carga
+  // indivisível/excesso de peso ou dimensão (ex: caminhão-prancha levando
+  // equipamento pesado). Assumi que se aplicam a caminhão (o veículo que
+  // transporta) e a pesado (o equipamento sendo transportado, já que a AET
+  // costuma referenciar o conjunto). Me avise se algum desses não fizer
+  // sentido ou se faltar algum órgão (ex: outro estado).
+  {
+    id: "aet_der_sp",
+    label: "AET DER-SP",
+    appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.PESADO],
+    hasValidity: true,
+  },
+  {
+    id: "aet_der_pr",
+    label: "AET DER-PR",
+    appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.PESADO],
+    hasValidity: true,
+  },
+  {
+    id: "aet_der_mg",
+    label: "AET DER-MG",
+    appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.PESADO],
+    hasValidity: true,
+  },
+  {
+    id: "agetop_go",
+    label: "AGETOP-GO",
+    appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.PESADO],
+    hasValidity: true,
+  },
+  {
+    id: "dnit",
+    label: "DNIT",
+    appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.PESADO],
+    hasValidity: true,
+  },
 ];
 
 // Retorna as categorias exigidas para um determinado tipo de ativo

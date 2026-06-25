@@ -6,6 +6,8 @@ import {
   getDoc,
   query,
   where,
+  updateDoc,
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
@@ -93,4 +95,29 @@ export async function saveDocumentMetadata({
     uploadedAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+/**
+ * Gestão de usuários (papel master, mesmo padrão de aprovação do mills-logistica).
+ * IMPORTANTE: estas funções só apagam/alteram o DOCUMENTO em /users — elas não
+ * apagam a conta de autenticação em si (isso exigiria Firebase Admin SDK, que
+ * não roda no browser por segurança). Pra exclusão definitiva da conta de login,
+ * use o Firebase Console > Authentication, ou peça que eu monte uma Cloud
+ * Function/Action específica pra isso se for um caso recorrente.
+ */
+export async function listUsers() {
+  const snapshot = await getDocs(collection(db, "users"));
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function updateUserStatus(uid, status) {
+  await updateDoc(doc(db, "users", uid), { status });
+}
+
+export async function updateUserRole(uid, role) {
+  await updateDoc(doc(db, "users", uid), { role });
+}
+
+export async function deleteUserDoc(uid) {
+  await deleteDoc(doc(db, "users", uid));
 }

@@ -2,13 +2,11 @@ import { getRequiredCategories } from "../config/categories";
 
 export const ALERT_STATUS = {
   OK: "ok",
-  VENCENDO: "vencendo", // dentro da janela de aviso (default 30 dias)
+  VENCENDO_15: "vencendo_15", // vence em até 15 dias
+  VENCENDO_30: "vencendo_30", // vence entre 16 e 30 dias
   VENCIDO: "vencido",
   FALTANTE: "faltante", // categoria obrigatória sem nenhum documento cadastrado
-  NAO_SE_APLICA: "nao_se_aplica",
 };
-
-const DEFAULT_WARNING_WINDOW_DAYS = 30;
 
 function daysUntil(dateStr) {
   const today = new Date();
@@ -20,14 +18,16 @@ function daysUntil(dateStr) {
 
 /**
  * Calcula o status de um único documento com base na validade.
+ * Dois patamares fixos de aviso: 15 e 30 dias (substituiu o seletor único
+ * de janela única — agora os dois aparecem sempre, simultaneamente).
  * @param {object} doc - { categoryId, validUntil: 'YYYY-MM-DD' | null }
- * @param {number} warningWindowDays
  */
-export function getDocumentStatus(doc, warningWindowDays = DEFAULT_WARNING_WINDOW_DAYS) {
+export function getDocumentStatus(doc) {
   if (!doc.validUntil) return ALERT_STATUS.OK; // documento sem validade (ex: ficha técnica, NF)
   const diff = daysUntil(doc.validUntil);
   if (diff < 0) return ALERT_STATUS.VENCIDO;
-  if (diff <= warningWindowDays) return ALERT_STATUS.VENCENDO;
+  if (diff <= 15) return ALERT_STATUS.VENCENDO_15;
+  if (diff <= 30) return ALERT_STATUS.VENCENDO_30;
   return ALERT_STATUS.OK;
 }
 
@@ -36,13 +36,12 @@ export function getDocumentStatus(doc, warningWindowDays = DEFAULT_WARNING_WINDO
  * com os documentos efetivamente cadastrados e retorna o painel de status completo.
  *
  * @param {object} asset - { id, placaOuTag, assetType }
- * @param {object[]} documents - documentos cadastrados para esse ativo: { categoryId, validUntil, fileUrl, year, ... }
+ * @param {object[]} documents - documentos cadastrados para esse ativo
  */
-export function buildAssetAlertPanel(asset, documents, warningWindowDays) {
+export function buildAssetAlertPanel(asset, documents) {
   const required = getRequiredCategories(asset.assetType);
 
   return required.map((cat) => {
-    // pega o documento mais recente daquela categoria (maior ano de vigência)
     const docsOfCategory = documents
       .filter((d) => d.categoryId === cat.id)
       .sort((a, b) => (b.year || 0) - (a.year || 0));
@@ -58,9 +57,7 @@ export function buildAssetAlertPanel(asset, documents, warningWindowDays) {
       };
     }
 
-    const status = cat.hasValidity
-      ? getDocumentStatus(latestDoc, warningWindowDays)
-      : ALERT_STATUS.OK;
+    const status = cat.hasValidity ? getDocumentStatus(latestDoc) : ALERT_STATUS.OK;
 
     return {
       categoryId: cat.id,
@@ -71,31 +68,36 @@ export function buildAssetAlertPanel(asset, documents, warningWindowDays) {
   });
 }
 
+const STATUS_PRIORITY = {
+  [ALERT_STATUS.VENCIDO]: 5,
+  [ALERT_STATUS.FALTANTE]: 5,
+  [ALERT_STATUS.VENCENDO_15]: 4,
+  [ALERT_STATUS.VENCENDO_30]: 3,
+  [ALERT_STATUS.OK]: 1,
+};
+
 /**
  * Roda o painel de alertas pra uma lista inteira de ativos.
- * Retorna um resumo agregado + detalhe por ativo, pronto pro dashboard de Gestão.
+ * Retorna um resumo agregado (com os dois patamares de aviso já separados)
+ * + detalhe por ativo, pronto pro dashboard de Gestão e pro script de e-mail.
  */
-export function buildFleetAlertSummary(assets, documentsByAssetId, warningWindowDays) {
+export function buildFleetAlertSummary(assets, documentsByAssetId) {
   const detail = assets.map((asset) => {
     const docs = documentsByAssetId[asset.id] || [];
-    const panel = buildAssetAlertPanel(asset, docs, warningWindowDays);
-    const worstStatus = panel.reduce((worst, item) => {
-      const priority = {
-        [ALERT_STATUS.VENCIDO]: 3,
-        [ALERT_STATUS.FALTANTE]: 3,
-        [ALERT_STATUS.VENCENDO]: 2,
-        [ALERT_STATUS.OK]: 1,
-      };
-      return priority[item.status] > priority[worst] ? item.status : worst;
-    }, ALERT_STATUS.OK);
-
+    const panel = buildAssetAlertPanel(asset, docs);
+    const worstStatus = panel.reduce(
+      (worst, item) =>
+        STATUS_PRIORITY[item.status] > STATUS_PRIORITY[worst] ? item.status : worst,
+      ALERT_STATUS.OK
+    );
     return { asset, panel, worstStatus };
   });
 
   const summary = {
     totalAtivos: assets.length,
     vencidos: detail.filter((d) => d.panel.some((p) => p.status === ALERT_STATUS.VENCIDO)).length,
-    vencendo: detail.filter((d) => d.panel.some((p) => p.status === ALERT_STATUS.VENCENDO)).length,
+    vencendo15: detail.filter((d) => d.panel.some((p) => p.status === ALERT_STATUS.VENCENDO_15)).length,
+    vencendo30: detail.filter((d) => d.panel.some((p) => p.status === ALERT_STATUS.VENCENDO_30)).length,
     faltantes: detail.filter((d) => d.panel.some((p) => p.status === ALERT_STATUS.FALTANTE)).length,
     ok: detail.filter((d) => d.worstStatus === ALERT_STATUS.OK).length,
   };
