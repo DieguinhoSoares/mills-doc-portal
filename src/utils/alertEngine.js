@@ -41,9 +41,18 @@ export function getDocumentStatus(doc) {
 /**
  * Para um ativo (placa/equipamento), cruza as categorias obrigatórias do seu tipo
  * com os documentos efetivamente cadastrados e retorna o painel de status completo.
+ *
+ * Regra especial: o Detran só libera o CRLV-e depois que IPVA e Licenciamento
+ * daquele exercício já foram pagos - então um CRLV confirmado é PROVA de que
+ * os outros dois também estão regularizados, mesmo sem documento próprio
+ * anexado. Evita pedir 3 uploads pra confirmar o que 1 já comprova.
  */
 export function buildAssetAlertPanel(asset, documents) {
   const required = getRequiredCategoriesForAsset(asset);
+
+  const crlvMaisRecente = documents
+    .filter((d) => d.categoryId === "crlv")
+    .sort((a, b) => (b.year || 0) - (a.year || 0))[0];
 
   return required.map((cat) => {
     const docsOfCategory = documents
@@ -53,6 +62,19 @@ export function buildAssetAlertPanel(asset, documents) {
     const latestDoc = docsOfCategory[0];
 
     if (!latestDoc) {
+      // Sem documento próprio de IPVA/Licenciamento - mas se tem CRLV
+      // confirmado, considera regularizado por inferência (mesmo ciclo de
+      // vencimento do CRLV, já que são liberados juntos pelo Detran).
+      if ((cat.id === "ipva" || cat.id === "licenciamento") && crlvMaisRecente) {
+        return {
+          categoryId: cat.id,
+          categoryLabel: cat.label,
+          status: getDocumentStatus(crlvMaisRecente),
+          document: null,
+          inferidoDoCrlv: true,
+        };
+      }
+
       return {
         categoryId: cat.id,
         categoryLabel: cat.label,

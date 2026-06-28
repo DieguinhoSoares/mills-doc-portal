@@ -161,7 +161,7 @@ export default function GestaoPanel() {
                   ) : (
                     pendencias.map((p) => (
                       <span key={p.categoryId} className={`badge ${STATUS_BADGE_CLASS[p.status]}`}>
-                        {p.categoryLabel}: {STATUS_LABEL[p.status]}
+                        {p.categoryLabel}: {STATUS_LABEL[p.status]}{p.inferidoDoCrlv ? " (via CRLV)" : ""}
                       </span>
                     ))
                   )}
@@ -180,6 +180,12 @@ export default function GestaoPanel() {
           })}
         </tbody>
       </table>
+
+      <p style={{ fontSize: 12, color: "#999", marginTop: 8 }}>
+        IPVA e Licenciamento sem documento próprio, mas com CRLV confirmado do mesmo
+        exercício, aparecem regularizados por inferência (o Detran só libera o CRLV-e
+        depois de pagos os dois) - sem badge específico de aviso, contam como OK.
+      </p>
 
       {editingExceptionsFor && (
         <ExceptionEditor
