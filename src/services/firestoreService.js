@@ -8,6 +8,7 @@ import {
   where,
   updateDoc,
   deleteDoc,
+  writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
@@ -138,17 +139,56 @@ export async function upsertAssetFromSim(record) {
   return { id: ref.id, action: "criado" };
 }
 
-export async function bulkUpsertAssetsFromSim(records) {
+/**
+ * Importação do CSV do SIM (semanal), em LOTES via writeBatch - muito mais
+ * rápido que gravar registro por registro (3.372 linhas em sequência levava
+ * minutos; em lotes de até 450, leva segundos).
+ * Busca todos os ativos UMA VEZ no início, em vez de uma consulta por linha.
+ */
+export async function bulkUpsertAssetsFromSim(records, onProgress) {
+  const allAssets = await listAssets();
+  const byPlaca = new Map(allAssets.map((a) => [a.placaOuTag, a]));
+
   const results = { criados: 0, atualizados: 0, erros: [] };
-  for (const record of records) {
+  const BATCH_SIZE = 450; // margem de segurança abaixo do limite de 500 do Firestore
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const chunk = records.slice(i, i + BATCH_SIZE);
+    const batch = writeBatch(db);
+
+    chunk.forEach((record) => {
+      const existing = byPlaca.get(record.placaOuTag);
+      const dadosSim = {
+        placaOuTag: record.placaOuTag,
+        numeroFrota: record.numeroFrota,
+        familia: record.familia,
+        assetType: record.assetType,
+        uf: record.uf || existing?.uf || "",
+        statusOperacional: record.statusOperacional,
+        arquivado: record.arquivado,
+        fabricante: record.fabricante,
+        modelo: record.modelo,
+      };
+
+      if (existing) {
+        batch.update(doc(db, "assets", existing.id), dadosSim);
+        results.atualizados += 1;
+      } else {
+        const newRef = doc(collection(db, "assets"));
+        batch.set(newRef, { ...dadosSim, cell: "", responsavel: "", createdAt: serverTimestamp() });
+        results.criados += 1;
+      }
+    });
+
     try {
-      const { action } = await upsertAssetFromSim(record);
-      if (action === "criado") results.criados += 1;
-      else results.atualizados += 1;
+      await batch.commit();
     } catch (err) {
-      results.erros.push({ placaOuTag: record.placaOuTag, erro: err.message });
+      chunk.forEach((r) => results.erros.push({ placaOuTag: r.placaOuTag, erro: err.message }));
     }
+
+    if (onProgress) onProgress(Math.min(i + BATCH_SIZE, records.length), records.length);
   }
+
   return results;
 }
 

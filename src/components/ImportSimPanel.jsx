@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { parseSimCsv } from "../utils/simCsvImport";
-import { bulkUpsertAssetsFromSim, listAssets } from "../services/firestoreService";
+import { bulkUpsertAssetsFromSim } from "../services/firestoreService";
 import { isBackendConfigured } from "../services/dataSource";
 
 export default function ImportSimPanel() {
@@ -8,6 +8,7 @@ export default function ImportSimPanel() {
   const [records, setRecords] = useState(null);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [preview, setPreview] = useState(null);
 
@@ -45,12 +46,15 @@ export default function ImportSimPanel() {
     if (!records) return;
     setImporting(true);
     setError(null);
+    setProgress({ feito: 0, total: records.length });
     try {
       if (!isBackendConfigured) {
         setResult({ criados: 0, atualizados: 0, erros: [], demo: true });
         return;
       }
-      const res = await bulkUpsertAssetsFromSim(records);
+      const res = await bulkUpsertAssetsFromSim(records, (feito, total) =>
+        setProgress({ feito, total })
+      );
       setResult(res);
       setRecords(null);
       setPreview(null);
@@ -58,6 +62,7 @@ export default function ImportSimPanel() {
       setError(err.message);
     } finally {
       setImporting(false);
+      setProgress(null);
     }
   }
 
@@ -115,8 +120,25 @@ export default function ImportSimPanel() {
             </p>
           )}
           <button className="btn" onClick={handleConfirm} disabled={importing}>
-            {importing ? "Importando..." : "Confirmar importação"}
+            {importing
+              ? progress
+                ? `Importando... ${progress.feito}/${progress.total}`
+                : "Importando..."
+              : "Confirmar importação"}
           </button>
+          {importing && progress && (
+            <div style={{ marginTop: 8, height: 6, background: "#eee", borderRadius: 3 }}>
+              <div
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  background: "var(--mills-laranja)",
+                  width: `${Math.round((progress.feito / progress.total) * 100)}%`,
+                  transition: "width 0.2s",
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 
