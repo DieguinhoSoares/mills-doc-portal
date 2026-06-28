@@ -23,6 +23,12 @@ export const DOCUMENT_CATEGORIES = [
     label: "CRLV",
     appliesTo: [ASSET_TYPES.CAMINHAO, ASSET_TYPES.VAN],
     hasValidity: true,
+    // O CRLV-e não tem data de vencimento impressa - ele só confirma que o
+    // "exercício" (ano) está pago. A validade real é calculada a partir do
+    // calendário de licenciamento do estado (ver calendarioLicenciamento.js),
+    // não extraída do documento pela IA. O UploadPanel trata essa categoria
+    // de forma especial por esse motivo.
+    validityFromCalendar: true,
   },
   {
     id: "ipva",
