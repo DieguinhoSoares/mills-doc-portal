@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { extractDocumentMetadata } from "../utils/geminiExtraction";
 import { DOCUMENT_CATEGORIES, ASSET_TYPE_LABELS, ASSET_TYPES, getCategoryById } from "../config/categories";
+import { calcularVencimentoLicenciamento, ESTADOS_BR } from "../config/calendarioLicenciamento";
 import { mockAssets } from "../data/mockData";
 import { isBackendConfigured } from "../services/dataSource";
 import { findAssetByPlaca, createAsset, saveDocumentMetadata } from "../services/firestoreService";
@@ -13,7 +14,7 @@ const MAX_FILE_MB = 15;
 const STATUS = {
   PENDING: "pending",
   EXTRACTING: "extracting",
-  READY: "ready", // extração concluída, esperando confirmação do analista
+  READY: "ready",
   SAVING: "saving",
   ERROR: "error",
   SAVED: "saved",
@@ -25,7 +26,7 @@ function makeId() {
 
 export default function UploadPanel() {
   const { user } = useAuth();
-  const [items, setItems] = useState([]); // { id, file, status, extraction, override, errorMsg }
+  const [items, setItems] = useState([]);
   const inputRef = useRef(null);
 
   function validateFile(file) {
@@ -63,22 +64,35 @@ export default function UploadPanel() {
     try {
       const extraction = await extractDocumentMetadata(file);
       setItems((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                status: STATUS.READY,
-                extraction,
-                override: {
-                  placaOuTag: extraction.placaOuTag || "",
-                  categoryId: extraction.categoryId || "",
-                  assetType: extraction.assetTypeGuess || "",
-                  year: extraction.year || new Date().getFullYear(),
-                  validUntil: extraction.validUntil || "",
-                },
-              }
-            : i
-        )
+        prev.map((i) => {
+          if (i.id !== id) return i;
+
+          const isCrlv = extraction.categoryId === "crlv";
+          const uf = extraction.ufRegistro || "";
+          const assetType = extraction.assetTypeGuess || "";
+          const validUntilCalculado = isCrlv
+            ? calcularVencimentoLicenciamento({
+                uf,
+                exercicioPago: extraction.year || new Date().getFullYear(),
+                placa: extraction.placaOuTag || "",
+                assetType,
+              })
+            : extraction.validUntil;
+
+          return {
+            ...i,
+            status: STATUS.READY,
+            extraction,
+            override: {
+              placaOuTag: extraction.placaOuTag || "",
+              categoryId: extraction.categoryId || "",
+              assetType: extraction.assetTypeGuess || "",
+              uf,
+              year: extraction.year || new Date().getFullYear(),
+              validUntil: validUntilCalculado || "",
+            },
+          };
+        })
       );
     } catch (err) {
       setItems((prev) =>
@@ -91,7 +105,23 @@ export default function UploadPanel() {
 
   function updateOverride(id, field, value) {
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, override: { ...i.override, [field]: value } } : i))
+      prev.map((i) => {
+        if (i.id !== id) return i;
+        const novoOverride = { ...i.override, [field]: value };
+
+        const camposQueAfetamCalculo = ["uf", "year", "placaOuTag", "categoryId", "assetType"];
+        if (novoOverride.categoryId === "crlv" && camposQueAfetamCalculo.includes(field)) {
+          novoOverride.validUntil =
+            calcularVencimentoLicenciamento({
+              uf: novoOverride.uf,
+              exercicioPago: novoOverride.year,
+              placa: novoOverride.placaOuTag,
+              assetType: novoOverride.assetType,
+            }) || "";
+        }
+
+        return { ...i, override: novoOverride };
+      })
     );
   }
 
@@ -102,7 +132,6 @@ export default function UploadPanel() {
 
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: STATUS.SAVING } : i)));
 
-    // Modo demonstração: sem Firebase configurado, só valida o fluxo de confirmação.
     if (!isBackendConfigured) {
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: STATUS.SAVED } : i)));
       return;
@@ -119,6 +148,7 @@ export default function UploadPanel() {
         const newAssetId = await createAsset({
           placaOuTag: override.placaOuTag,
           assetType: override.assetType,
+          uf: override.uf || "",
           cell: "",
           responsavel: user.name,
         });
@@ -290,7 +320,20 @@ function UploadItemCard({ item, onUpdate, onConfirm, onDiscard }) {
               </select>
             </Field>
 
-            <Field label="Ano de vigência">
+            <Field label="UF de registro (necessário pra calcular vencimento de CRLV)">
+              <select
+                value={override.uf || ""}
+                onChange={(e) => onUpdate("uf", e.target.value)}
+                disabled={status === STATUS.SAVED || status === STATUS.SAVING}
+              >
+                <option value="">Selecione...</option>
+                {ESTADOS_BR.map((uf) => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Ano de vigência / exercício">
               <input
                 type="number"
                 value={override.year}
@@ -299,60 +342,6 @@ function UploadItemCard({ item, onUpdate, onConfirm, onDiscard }) {
               />
             </Field>
 
-            <Field label="Data de validade (se houver)">
-              <input
-                type="date"
-                value={override.validUntil}
-                onChange={(e) => onUpdate("validUntil", e.target.value)}
-                disabled={status === STATUS.SAVED || status === STATUS.SAVING}
-              />
-            </Field>
-          </div>
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            {(status === STATUS.READY || status === STATUS.ERROR) && (
-              <>
-                <button
-                  className="btn"
-                  onClick={onConfirm}
-                  disabled={!override.placaOuTag || !override.categoryId}
-                >
-                  Confirmar e salvar
-                </button>
-                <button className="btn secondary" onClick={onDiscard}>Descartar</button>
-              </>
-            )}
-            {status === STATUS.SAVING && <span style={{ fontSize: 13, color: "#888" }}>Salvando...</span>}
-            {status === STATUS.SAVED && (
-              <span style={{ color: "var(--status-ok)", fontSize: 13, fontWeight: 600 }}>
-                ✓ Salvo em {override.placaOuTag} / {getCategoryById(override.categoryId)?.label} / {override.year}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label style={{ display: "block", fontSize: 13 }}>
-      <span style={{ display: "block", color: "#777", marginBottom: 4 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function StatusBadge({ status }) {
-  const map = {
-    [STATUS.PENDING]: { label: "Na fila", cls: "faltante" },
-    [STATUS.EXTRACTING]: { label: "Lendo...", cls: "vencendo" },
-    [STATUS.READY]: { label: "Aguardando confirmação", cls: "vencendo" },
-    [STATUS.SAVING]: { label: "Salvando...", cls: "vencendo" },
-    [STATUS.ERROR]: { label: "Erro", cls: "vencido" },
-    [STATUS.SAVED]: { label: "Salvo", cls: "ok" },
-  };
-  const { label, cls } = map[status] || {};
-  return <span className={`badge ${cls}`}>{label}</span>;
-}
+            <Field
+              label={
+                override.categoryId === "crlv"
