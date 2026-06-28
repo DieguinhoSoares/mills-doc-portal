@@ -149,7 +149,7 @@ export default function GestaoPanel() {
             return (
               <tr key={asset.id} style={asset.arquivado ? { opacity: 0.5 } : undefined}>
                 <td>
-                  <strong>{asset.placaOuTag}</strong>
+                  <strong>{asset.placa !== undefined ? (asset.placa || "—") : asset.placaOuTag}</strong>
                   {asset.arquivado && <div style={{ fontSize: 11, color: "#999" }}>Arquivado ({asset.statusOperacional})</div>}
                 </td>
                 <td>{asset.numeroFrota || "—"}</td>

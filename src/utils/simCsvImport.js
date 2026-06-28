@@ -47,6 +47,7 @@ export function parseSimCsv(fileText) {
 
   const idx = {
     placa: headers.indexOf("Placa"),
+    numeroInterno: headers.indexOf("Nº interno"),
     codigoAtivo: headers.indexOf("Código ativo"),
     familia: headers.indexOf("Família"),
     status: headers.indexOf("Status"),
@@ -63,13 +64,27 @@ export function parseSimCsv(fileText) {
   }
 
   return dataRows
-    .filter((row) => row[idx.placa] || row[idx.codigoAtivo]) // ignora linhas vazias no fim
+    .filter((row) => row[idx.placa] || row[idx.numeroInterno] || row[idx.codigoAtivo])
     .map((row) => {
       const familia = row[idx.familia] || "";
       const status = row[idx.status] || "";
+      const placa = (row[idx.placa] || "").trim();
+      const numeroInterno = (row[idx.numeroInterno] || "").trim();
+      const codigoAtivo = (row[idx.codigoAtivo] || "").trim();
+
       return {
-        placaOuTag: (row[idx.placa] || row[idx.codigoAtivo] || "").trim(),
-        numeroFrota: (row[idx.codigoAtivo] || "").trim(),
+        // placa: literal, só pra exibição - fica vazia quando o ativo não tem
+        // placa de verdade (a tela mostra "---" nesse caso, não inventa valor).
+        placa,
+        // numeroFrota: "Nº interno" do SIM, preenchido em 100% dos registros -
+        // é o que aparece na coluna "Nº Frota" da Gestão/Consulta.
+        numeroFrota: numeroInterno,
+        // placaOuTag: identificador único INTERNO usado pra casar documentos
+        // e localizar o ativo no banco - nunca fica vazio (cai pra Nº interno
+        // ou Código ativo quando não há placa), mas não é o que aparece como
+        // "Placa" na tela.
+        placaOuTag: placa || numeroInterno || codigoAtivo,
+        codigoAtivo,
         familia,
         assetType: inferAssetType(familia),
         uf: extractUf(row[idx.estadoPlantaObra]),

@@ -160,7 +160,9 @@ export async function bulkUpsertAssetsFromSim(records, onProgress) {
       const existing = byPlaca.get(record.placaOuTag);
       const dadosSim = {
         placaOuTag: record.placaOuTag,
+        placa: record.placa || "",
         numeroFrota: record.numeroFrota,
+        codigoAtivo: record.codigoAtivo || "",
         familia: record.familia,
         assetType: record.assetType,
         uf: record.uf || existing?.uf || "",

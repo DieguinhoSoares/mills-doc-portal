@@ -111,9 +111,9 @@ export default function ConsultaPanel() {
         <table className="asset-table">
           <thead>
             <tr>
-              <th>Placa/Tag</th>
+              <th>Placa</th>
               <th>Nº Frota</th>
-              <th>Tipo</th>
+              <th>Subtipo</th>
               <th>Célula</th>
               <th></th>
             </tr>
@@ -121,9 +121,9 @@ export default function ConsultaPanel() {
           <tbody>
             {filteredAssets.map((a) => (
               <tr key={a.id}>
-                <td><strong>{a.placaOuTag}</strong></td>
+                <td><strong>{a.placa !== undefined ? (a.placa || "—") : a.placaOuTag}</strong></td>
                 <td>{a.numeroFrota || "—"}</td>
-                <td>{ASSET_TYPE_LABELS[a.assetType]}</td>
+                <td>{a.familia || ASSET_TYPE_LABELS[a.assetType] || "—"}</td>
                 <td>{a.cell}</td>
                 <td>
                   <button className="btn secondary" onClick={() => setSelectedAssetId(a.id)}>
@@ -146,7 +146,9 @@ export default function ConsultaPanel() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div>
               <button className="btn secondary" onClick={() => setSelectedAssetId(null)}>← Voltar</button>
-              <h3 style={{ display: "inline-block", marginLeft: 12 }}>{selectedAsset.placaOuTag}</h3>
+              <h3 style={{ display: "inline-block", marginLeft: 12 }}>
+                {selectedAsset.placa ? `${selectedAsset.placa} · Frota ${selectedAsset.numeroFrota || "—"}` : `Frota ${selectedAsset.numeroFrota || selectedAsset.placaOuTag}`}
+              </h3>
             </div>
             <button
               className="btn"
