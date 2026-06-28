@@ -35,17 +35,20 @@ service cloud.firestore {
       allow update, delete: if isMaster();
     }
 
-    // Ativos e documentos: leitura liberada pra qualquer usuário ATIVO
-    // (inclui consultante - é exatamente o caso de uso da guia de Consulta).
-    // Escrita só pra analista/gestor/master.
+    // Ativos: leitura liberada pra qualquer usuário ATIVO (inclui consultante
+    // - é exatamente o caso de uso da guia de Consulta). Escrita só pra
+    // analista/gestor/master.
     match /assets/{assetId} {
       allow read: if isAtivo();
       allow write: if isAnalistaOuAcima();
+    }
 
-      match /documents/{documentId} {
-        allow read: if isAtivo();
-        allow write: if isAnalistaOuAcima();
-      }
+    // Documentos: coleção PLANA (não mais subcoleção do ativo) - cada
+    // documento tem um campo assetId. Migrado pra escalar melhor com frotas
+    // grandes (1 leitura pra trazer tudo, em vez de uma consulta por ativo).
+    match /documents/{documentId} {
+      allow read: if isAtivo();
+      allow write: if isAnalistaOuAcima();
     }
   }
 }

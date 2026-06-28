@@ -55,35 +55,34 @@ export async function updateAsset(assetId, data) {
 }
 
 export async function listDocumentsForAsset(assetId) {
-  const snapshot = await getDocs(collection(db, "assets", assetId, "documents"));
+  const q = query(collection(db, "documents"), where("assetId", "==", assetId));
+  const snapshot = await getDocs(q);
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 /**
- * Carrega os documentos de todos os ativos de uma vez, no formato que o
- * alertEngine espera: { [assetId]: [documentos...] }
- *
- * IMPORTANTE: processa em LOTES pequenos (não tudo de uma vez) - com a frota
- * na faixa de 2.900+ ativos, disparar uma leitura por ativo simultaneamente
- * estoura o limite de requisições concorrentes do Firestore ("Too many
- * outstanding requests"). Isso é uma solução de contorno; o ideal mesmo,
- * pra esse volume, é migrar pra uma coleção plana /documents com campo
- * assetId, consultável com poucas queries em vez de N. Fazer isso é o
- * próximo passo recomendado se a frota continuar nesse tamanho.
+ * Busca TODOS os documentos da frota numa única leitura, e agrupa por ativo
+ * no cliente. Substitui o modelo antigo (subcoleção /assets/{id}/documents,
+ * que exigia uma consulta por ativo) - escala bem pra frotas de milhares de
+ * ativos, já que o custo agora é O(1) consulta em vez de O(N).
  */
+export async function listAllDocuments() {
+  const snapshot = await getDocs(collection(db, "documents"));
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 export async function listDocumentsByAssetId(assetIds) {
+  const allDocs = await listAllDocuments();
+  const assetIdSet = new Set(assetIds);
   const result = {};
-  const TAMANHO_LOTE = 20;
-
-  for (let i = 0; i < assetIds.length; i += TAMANHO_LOTE) {
-    const lote = assetIds.slice(i, i + TAMANHO_LOTE);
-    await Promise.all(
-      lote.map(async (id) => {
-        result[id] = await listDocumentsForAsset(id);
-      })
-    );
-  }
-
+  assetIds.forEach((id) => {
+    result[id] = [];
+  });
+  allDocs.forEach((d) => {
+    if (assetIdSet.has(d.assetId)) {
+      result[d.assetId].push(d);
+    }
+  });
   return result;
 }
 
@@ -91,6 +90,7 @@ export async function listDocumentsByAssetId(assetIds) {
  * Salva o metadado de um documento já enviado ao storage (Firebase ou SharePoint).
  * `storageResult` vem de storageAdapter.uploadFile() - contém fileUrl/storagePath
  * e, no caso do SharePoint, graphItemId (necessário pra buscar o blob depois).
+ * Grava na coleção plana /documents (não mais como subcoleção do ativo).
  */
 export async function saveDocumentMetadata({
   assetId,
@@ -101,7 +101,8 @@ export async function saveDocumentMetadata({
   storageResult,
   uploadedBy,
 }) {
-  const ref = await addDoc(collection(db, "assets", assetId, "documents"), {
+  const ref = await addDoc(collection(db, "documents"), {
+    assetId,
     categoryId,
     year,
     validUntil: validUntil || null,
