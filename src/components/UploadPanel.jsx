@@ -345,3 +345,70 @@ function UploadItemCard({ item, onUpdate, onConfirm, onDiscard }) {
             <Field
               label={
                 override.categoryId === "crlv"
+                  ? "Vencimento (calculado pelo calendário de licenciamento)"
+                  : "Data de validade (se houver)"
+              }
+            >
+              <input
+                type="date"
+                value={override.validUntil}
+                onChange={(e) => onUpdate("validUntil", e.target.value)}
+                disabled={status === STATUS.SAVED || status === STATUS.SAVING}
+              />
+              {override.categoryId === "crlv" && !override.validUntil && (
+                <p style={{ color: "var(--status-vencendo)", fontSize: 12, marginTop: 4 }}>
+                  Calendário de licenciamento ainda não cadastrado pra {override.uf || "esse estado"}
+                  /{(override.year || 0) + 1}. Confirme a data direto no Detran do estado e preencha
+                  manualmente.
+                </p>
+              )}
+            </Field>
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            {(status === STATUS.READY || status === STATUS.ERROR) && (
+              <>
+                <button
+                  className="btn"
+                  onClick={onConfirm}
+                  disabled={!override.placaOuTag || !override.categoryId}
+                >
+                  Confirmar e salvar
+                </button>
+                <button className="btn secondary" onClick={onDiscard}>Descartar</button>
+              </>
+            )}
+            {status === STATUS.SAVING && <span style={{ fontSize: 13, color: "#888" }}>Salvando...</span>}
+            {status === STATUS.SAVED && (
+              <span style={{ color: "var(--status-ok)", fontSize: 13, fontWeight: 600 }}>
+                ✓ Salvo em {override.placaOuTag} / {getCategoryById(override.categoryId)?.label} / {override.year}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: "block", fontSize: 13 }}>
+      <span style={{ display: "block", color: "#777", marginBottom: 4 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    [STATUS.PENDING]: { label: "Na fila", cls: "faltante" },
+    [STATUS.EXTRACTING]: { label: "Lendo...", cls: "vencendo" },
+    [STATUS.READY]: { label: "Aguardando confirmação", cls: "vencendo" },
+    [STATUS.SAVING]: { label: "Salvando...", cls: "vencendo" },
+    [STATUS.ERROR]: { label: "Erro", cls: "vencido" },
+    [STATUS.SAVED]: { label: "Salvo", cls: "ok" },
+  };
+  const { label, cls } = map[status] || {};
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
