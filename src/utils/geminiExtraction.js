@@ -82,9 +82,12 @@ export async function extractDocumentMetadata(file) {
 
   const base64Data = await fileToBase64(file);
 
-  const response = await fetch(`${GEMINI_ENDPOINT}?key=${API_KEY}`, {
+  const response = await fetch(GEMINI_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": API_KEY,
+    },
     body: JSON.stringify({
       contents: [
         {
