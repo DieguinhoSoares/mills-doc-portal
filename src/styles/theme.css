@@ -207,3 +207,19 @@ body {
   padding: 40px;
   color: #999;
 }
+
+.link-baixar {
+  margin-left: 8px;
+  color: var(--mills-laranja);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-primary);
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+.link-baixar:hover {
+  color: var(--mills-terracota);
+}
