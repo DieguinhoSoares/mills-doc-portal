@@ -5,16 +5,16 @@ import {
   createUserWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, serverTimestamp, getDocFromServer } from "firebase/firestore";
 import { auth, db, isConfigured as isFirebaseConfigured } from "../config/firebase";
 
 const AuthContext = createContext(null);
 
 export const ROLES = {
-  MASTER: "master", // você - aprova/bloqueia/exclui consultantes, vê tudo
-  GESTOR: "gestor", // vê Consulta + Upload + Gestão de Frotas
-  ANALISTA: "analista", // vê Consulta + Upload
-  CONSULTANTE: "consultante", // só vê Consulta - precisa ser aprovado pelo master
+  MASTER: "master",
+  GESTOR: "gestor",
+  ANALISTA: "analista",
+  CONSULTANTE: "consultante",
 };
 
 export const USER_STATUS = {
@@ -23,8 +23,6 @@ export const USER_STATUS = {
   BLOQUEADO: "bloqueado",
 };
 
-// Mock usado só em modo demonstração (sem .env), pra você navegar pelos
-// painéis sem precisar logar de verdade. Em produção isso nunca é usado.
 const DEMO_USER = {
   uid: "demo-user",
   name: "Diego Soares (demo)",
@@ -41,7 +39,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!isFirebaseConfigured) return;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeUserDoc = null;
+    let creatingProfile = false;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+        unsubscribeUserDoc = null;
+      }
+
       if (!firebaseUser) {
         setUser(null);
         setLoading(false);
@@ -49,26 +55,54 @@ export function AuthProvider({ children }) {
       }
 
       const userDocRef = doc(db, "users", firebaseUser.uid);
-      const userDoc = await getDoc(userDocRef);
 
-      if (userDoc.exists()) {
-        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...userDoc.data() });
-      } else {
-        // Primeiro acesso desse e-mail: cria cadastro pendente de aprovação do master.
-        const newProfile = {
-          email: firebaseUser.email,
-          name: firebaseUser.email.split("@")[0],
-          role: ROLES.CONSULTANTE,
-          status: USER_STATUS.PENDENTE,
-          requestedAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, newProfile);
-        setUser({ uid: firebaseUser.uid, ...newProfile });
-      }
-      setLoading(false);
+      unsubscribeUserDoc = onSnapshot(
+        userDocRef,
+        async (snap) => {
+          if (snap.exists()) {
+            setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...snap.data() });
+            setLoading(false);
+
+            if (snap.metadata.hasPendingWrites) {
+              try {
+                await getDocFromServer(userDocRef);
+              } catch (err) {
+                console.error("Escrita não confirmada pelo servidor:", err);
+                setAuthError(
+                  "Seu cadastro foi criado localmente mas ainda não foi confirmado pelo servidor. Recarregue a página em alguns segundos."
+                );
+              }
+            }
+          } else if (!creatingProfile) {
+            creatingProfile = true;
+            try {
+              const newProfile = {
+                email: firebaseUser.email,
+                name: firebaseUser.email.split("@")[0],
+                role: ROLES.CONSULTANTE,
+                status: USER_STATUS.PENDENTE,
+                requestedAt: serverTimestamp(),
+              };
+              await setDoc(userDocRef, newProfile);
+            } catch (err) {
+              console.error("Erro ao criar perfil:", err);
+              setAuthError(`Erro ao criar seu perfil (${err.code || err.message}).`);
+              setLoading(false);
+            }
+          }
+        },
+        (err) => {
+          console.error("Erro no listener do perfil:", err);
+          setAuthError(`Erro ao carregar seu perfil (${err.code || err.message}).`);
+          setLoading(false);
+        }
+      );
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+    };
   }, []);
 
   async function signIn(email, password) {
@@ -85,7 +119,6 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged acima já cria o documento pendente em /users
     } catch (err) {
       setAuthError(traduzErroAuth(err.code));
       throw err;
