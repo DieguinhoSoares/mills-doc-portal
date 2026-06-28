@@ -37,10 +37,11 @@ export async function findAssetByPlaca(placaOuTag) {
   return { id: d.id, ...d.data() };
 }
 
-export async function createAsset({ placaOuTag, assetType, cell, responsavel }) {
+export async function createAsset({ placaOuTag, assetType, uf, cell, responsavel }) {
   const ref = await addDoc(collection(db, "assets"), {
     placaOuTag,
     assetType,
+    uf: uf || "",
     cell,
     responsavel,
     createdAt: serverTimestamp(),
