@@ -10,9 +10,9 @@ import { listAssets, listDocumentsByAssetId } from "./firestoreService";
  */
 export const isBackendConfigured = Boolean(import.meta.env.VITE_FIREBASE_PROJECT_ID);
 
-export async function getAssets() {
-  if (!isBackendConfigured) return mockAssets;
-  return listAssets();
+export async function getAssets({ incluirArquivados = false } = {}) {
+  const all = isBackendConfigured ? await listAssets() : mockAssets;
+  return incluirArquivados ? all : all.filter((a) => !a.arquivado);
 }
 
 export async function getDocumentsByAssetId(assets) {

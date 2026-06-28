@@ -49,6 +49,10 @@ export async function createAsset({ placaOuTag, assetType, uf, cell, responsavel
   return ref.id;
 }
 
+export async function updateAsset(assetId, data) {
+  await updateDoc(doc(db, "assets", assetId), data);
+}
+
 export async function listDocumentsForAsset(assetId) {
   const snapshot = await getDocs(collection(db, "assets", assetId, "documents"));
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -96,6 +100,56 @@ export async function saveDocumentMetadata({
     uploadedAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+/**
+ * Importação do CSV do SIM (semanal). Pra cada registro do CSV:
+ * - se já existe ativo com essa placa/tag, atualiza familia/uf/status/arquivado
+ * - se não existe, cria um novo ativo
+ * Não toca em campos que o portal controla por conta própria (cell,
+ * responsavel, categoriasExcecao) - só nos campos que vêm do SIM.
+ */
+export async function upsertAssetFromSim(record) {
+  const existing = await findAssetByPlaca(record.placaOuTag);
+
+  const dadosSim = {
+    placaOuTag: record.placaOuTag,
+    numeroFrota: record.numeroFrota,
+    familia: record.familia,
+    assetType: record.assetType,
+    uf: record.uf || existing?.uf || "",
+    statusOperacional: record.statusOperacional,
+    arquivado: record.arquivado,
+    fabricante: record.fabricante,
+    modelo: record.modelo,
+  };
+
+  if (existing) {
+    await updateDoc(doc(db, "assets", existing.id), dadosSim);
+    return { id: existing.id, action: "atualizado" };
+  }
+
+  const ref = await addDoc(collection(db, "assets"), {
+    ...dadosSim,
+    cell: "",
+    responsavel: "",
+    createdAt: serverTimestamp(),
+  });
+  return { id: ref.id, action: "criado" };
+}
+
+export async function bulkUpsertAssetsFromSim(records) {
+  const results = { criados: 0, atualizados: 0, erros: [] };
+  for (const record of records) {
+    try {
+      const { action } = await upsertAssetFromSim(record);
+      if (action === "criado") results.criados += 1;
+      else results.atualizados += 1;
+    } catch (err) {
+      results.erros.push({ placaOuTag: record.placaOuTag, erro: err.message });
+    }
+  }
+  return results;
 }
 
 /**

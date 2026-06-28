@@ -1,4 +1,6 @@
 // Tipos de ativo suportados pelo portal
+import { getCategoriasPorFamilia } from "./familiaDocumentos";
+
 export const ASSET_TYPES = {
   CAMINHAO: "caminhao",
   VAN: "van",
@@ -143,9 +145,34 @@ export const DOCUMENT_CATEGORIES = [
   },
 ];
 
-// Retorna as categorias exigidas para um determinado tipo de ativo
+// Retorna as categorias exigidas para um determinado tipo de ativo (modo antigo,
+// usado como fallback quando o ativo não tem Família cadastrada ainda - ex:
+// ativos criados manualmente pelo Upload antes da importação do SIM)
 export function getRequiredCategories(assetType) {
   return DOCUMENT_CATEGORIES.filter((cat) => cat.appliesTo.includes(assetType));
+}
+
+/**
+ * Versão nova, que usa a Família (subtipo do SIM) como fonte principal,
+ * com exceções pontuais por veículo (categoriasExcecao no documento do
+ * ativo: { adicionar: [...], remover: [...] }) - é o que cobre o caso do
+ * "basculante específico que não tem CIV" sem mexer na regra geral.
+ *
+ * @param {object} asset - precisa ter .familia (opcional) e .assetType
+ *   (sempre, fallback) e pode ter .categoriasExcecao
+ */
+export function getRequiredCategoriesForAsset(asset) {
+  const baseIds = asset.familia
+    ? getCategoriasPorFamilia(asset.familia)
+    : getRequiredCategories(asset.assetType).map((c) => c.id);
+
+  const excecao = asset.categoriasExcecao || {};
+  const remover = new Set(excecao.remover || []);
+  const adicionar = excecao.adicionar || [];
+
+  const finalIds = [...new Set([...baseIds, ...adicionar])].filter((id) => !remover.has(id));
+
+  return finalIds.map((id) => getCategoryById(id)).filter(Boolean);
 }
 
 export function getCategoryById(id) {

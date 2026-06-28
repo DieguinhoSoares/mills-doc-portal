@@ -14,7 +14,8 @@
     "react-dom": "^19.0.0",
     "jszip": "^3.10.1",
     "firebase": "^11.0.0",
-    "@azure/msal-browser": "^3.27.0"
+    "@azure/msal-browser": "^3.27.0",
+    "papaparse": "^5.4.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

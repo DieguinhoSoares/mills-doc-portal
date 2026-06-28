@@ -30,6 +30,11 @@ async function downloadAssetFolderAsZip(asset, documents) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Agrupa os documentos por categoria e separa o mais recente (por ano) dos
+ * demais - o consultante deve ver direto a versão vigente, sem precisar
+ * adivinhar qual dos vários PDFs daquela categoria é o atual.
+ */
 function groupByCategoryLatestFirst(documents) {
   const byCategory = {};
   documents.forEach((doc) => {
@@ -69,7 +74,14 @@ export default function ConsultaPanel() {
   }, []);
 
   const filteredAssets = useMemo(
-    () => assets.filter((a) => a.placaOuTag.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      assets.filter((a) => {
+        const term = search.toLowerCase();
+        return (
+          a.placaOuTag.toLowerCase().includes(term) ||
+          (a.numeroFrota || "").toLowerCase().includes(term)
+        );
+      }),
     [assets, search]
   );
 
@@ -89,7 +101,7 @@ export default function ConsultaPanel() {
 
       <div className="search-bar">
         <input
-          placeholder="Buscar por placa ou tag do ativo..."
+          placeholder="Buscar por placa, tag ou número de frota..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -100,6 +112,7 @@ export default function ConsultaPanel() {
           <thead>
             <tr>
               <th>Placa/Tag</th>
+              <th>Nº Frota</th>
               <th>Tipo</th>
               <th>Célula</th>
               <th></th>
@@ -109,6 +122,7 @@ export default function ConsultaPanel() {
             {filteredAssets.map((a) => (
               <tr key={a.id}>
                 <td><strong>{a.placaOuTag}</strong></td>
+                <td>{a.numeroFrota || "—"}</td>
                 <td>{ASSET_TYPE_LABELS[a.assetType]}</td>
                 <td>{a.cell}</td>
                 <td>
@@ -120,7 +134,7 @@ export default function ConsultaPanel() {
             ))}
             {filteredAssets.length === 0 && (
               <tr>
-                <td colSpan={4} className="empty-state">Nenhum ativo encontrado para essa busca.</td>
+                <td colSpan={5} className="empty-state">Nenhum ativo encontrado para essa busca.</td>
               </tr>
             )}
           </tbody>
