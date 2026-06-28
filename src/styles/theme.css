@@ -9,6 +9,8 @@
   --status-vencendo: #d99a1b;
   --status-vencido: #c24003;
   --status-faltante: #6b6b6b;
+  --status-critico: #e85d2f;
+  --status-preventivo: #2f7e9e;
 
   --font-primary: "IBM Plex Sans", Arial, sans-serif;
   --radius-base: 8px;
@@ -95,6 +97,8 @@ body {
 .summary-card.vencendo { border-left-color: var(--status-vencendo); }
 .summary-card.faltante { border-left-color: var(--status-faltante); }
 .summary-card.ok { border-left-color: var(--status-ok); }
+.summary-card.critico { border-left-color: var(--status-critico); }
+.summary-card.preventivo { border-left-color: var(--status-preventivo); }
 
 .summary-card .number {
   font-size: 28px;
@@ -143,6 +147,8 @@ body {
 .badge.vencendo { background: #fdf3df; color: var(--status-vencendo); }
 .badge.vencido { background: #fbe6dc; color: var(--status-vencido); }
 .badge.faltante { background: #ececec; color: var(--status-faltante); }
+.badge.critico { background: #fde6dc; color: var(--status-critico); }
+.badge.preventivo { background: #e3f0f5; color: var(--status-preventivo); }
 
 .search-bar {
   display: flex;
