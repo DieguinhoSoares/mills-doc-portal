@@ -28,8 +28,9 @@ Analise o documento anexado (PDF ou imagem) e extraia as seguintes informações
   "placaOuTag": string ou null,
   "categoryId": uma das opções abaixo ou null,
   "assetTypeGuess": uma de [${assetTypeList}] ou null,
-  "year": número (ano de vigência/emissão do documento) ou null,
-  "validUntil": "YYYY-MM-DD" ou null (data de vencimento/validade, se o documento tiver),
+  "ufRegistro": sigla do estado de registro do veículo (ex: "SP", "MG") ou null,
+  "year": número (ano de vigência/emissão do documento, ou o "exercício" no caso de CRLV) ou null,
+  "validUntil": "YYYY-MM-DD" ou null (data de vencimento/validade, se o documento tiver uma impressa),
   "confidence": número de 0 a 1 (sua confiança na classificação)
 }
 
@@ -38,8 +39,18 @@ ${categoryList}
 
 Regras:
 - Se não conseguir identificar a placa com certeza, retorne null em "placaOuTag" — não invente.
+- ATENÇÃO ESPECIAL PARA CRLV: o CRLV-e (Certificado de Registro e Licenciamento de Veículo eletrônico) NÃO tem
+  data de vencimento impressa - ele só mostra o "exercício" (ano) que está pago, normalmente no campo
+  "Exercício" ou similar. Para documentos da categoria crlv, SEMPRE retorne "validUntil": null, e coloque o
+  exercício/ano pago no campo "year". Nunca invente uma data de vencimento para CRLV a partir da data de
+  emissão - isso seria um erro de compliance, porque o vencimento real depende do calendário do Detran do
+  estado, que é calculado separadamente pelo sistema.
+- Para as demais categorias com data de vencimento impressa de fato (ex: Seguro/Apólice, IPVA quando aplicável,
+  Licenciamento, AETs), extraia normalmente a data real do documento em "validUntil".
 - Se o documento não tiver data de vencimento (ex: nota fiscal, ficha técnica), retorne null em "validUntil".
-- "year" deve ser o ano de vigência do documento, não a data de hoje.
+- "year" deve ser o ano de vigência/exercício do documento, não a data de hoje.
+- Tente identificar "ufRegistro" pela placa (padrão Mercosul/antigo não indica estado) ou por menção explícita
+  no documento ao órgão emissor (ex: "Detran-SP" indica ufRegistro "SP"). Se não tiver certeza, retorne null.
 - Seja conservador: se tiver dúvida real entre duas categorias, escolha a mais provável mas reduza "confidence".`;
 }
 
@@ -98,7 +109,6 @@ export async function extractDocumentMetadata(file) {
 
   const parsed = parseJsonResponse(rawText);
 
-  // Validação defensiva: categoryId precisa existir no catálogo
   const validCategory = DOCUMENT_CATEGORIES.some((c) => c.id === parsed.categoryId);
   if (!validCategory) parsed.categoryId = null;
 
