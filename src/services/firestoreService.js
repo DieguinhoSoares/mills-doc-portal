@@ -62,16 +62,28 @@ export async function listDocumentsForAsset(assetId) {
 /**
  * Carrega os documentos de todos os ativos de uma vez, no formato que o
  * alertEngine espera: { [assetId]: [documentos...] }
- * Atenção: isso faz N+1 leituras (uma por ativo). Pra frotas grandes, considere
- * migrar pra uma coleção plana /documents com campo assetId e where('assetId','in',...).
+ *
+ * IMPORTANTE: processa em LOTES pequenos (não tudo de uma vez) - com a frota
+ * na faixa de 2.900+ ativos, disparar uma leitura por ativo simultaneamente
+ * estoura o limite de requisições concorrentes do Firestore ("Too many
+ * outstanding requests"). Isso é uma solução de contorno; o ideal mesmo,
+ * pra esse volume, é migrar pra uma coleção plana /documents com campo
+ * assetId, consultável com poucas queries em vez de N. Fazer isso é o
+ * próximo passo recomendado se a frota continuar nesse tamanho.
  */
 export async function listDocumentsByAssetId(assetIds) {
   const result = {};
-  await Promise.all(
-    assetIds.map(async (id) => {
-      result[id] = await listDocumentsForAsset(id);
-    })
-  );
+  const TAMANHO_LOTE = 20;
+
+  for (let i = 0; i < assetIds.length; i += TAMANHO_LOTE) {
+    const lote = assetIds.slice(i, i + TAMANHO_LOTE);
+    await Promise.all(
+      lote.map(async (id) => {
+        result[id] = await listDocumentsForAsset(id);
+      })
+    );
+  }
+
   return result;
 }
 
