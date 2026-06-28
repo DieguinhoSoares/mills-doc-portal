@@ -3,7 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginScreen() {
   const { signIn, signUp, authError } = useAuth();
-  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
