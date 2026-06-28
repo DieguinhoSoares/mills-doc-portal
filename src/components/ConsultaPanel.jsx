@@ -161,14 +161,13 @@ export default function ConsultaPanel() {
                   <div key={categoryId} style={{ marginBottom: 8 }}>
                     <div className="doc-pill" style={{ cursor: "default" }}>
                       📄 {cat?.label || categoryId} ({latest.year || "—"}) — {latest.fileName}
-                      
-                        href={latest.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ marginLeft: 8, color: "var(--mills-laranja)" }}
+                      <button
+                        type="button"
+                        className="link-baixar"
+                        onClick={() => window.open(latest.fileUrl, "_blank", "noopener,noreferrer")}
                       >
                         Baixar
-                      </a>
+                      </button>
                       {older.length > 0 && (
                         <button
                           className="btn secondary"
@@ -184,14 +183,13 @@ export default function ConsultaPanel() {
                         {older.map((doc, idx) => (
                           <div key={idx} className="doc-pill" style={{ opacity: 0.75 }}>
                             📄 {cat?.label || categoryId} ({doc.year || "—"}) — {doc.fileName}
-                            
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ marginLeft: 8, color: "var(--mills-laranja)" }}
+                            <button
+                              type="button"
+                              className="link-baixar"
+                              onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
                             >
                               Baixar
-                            </a>
+                            </button>
                           </div>
                         ))}
                       </div>
