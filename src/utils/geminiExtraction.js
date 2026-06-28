@@ -1,11 +1,10 @@
 import { DOCUMENT_CATEGORIES, ASSET_TYPES } from "../config/categories";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-// Mesma chave usada no mills-frotas — Google AI Studio, tier gratuito.
-// Crie em https://aistudio.google.com/app/apikey e coloque em .env como VITE_GEMINI_API_KEY
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+// Endpoint do proxy no Vercel (mills-gemini-proxy), não o Gemini direto.
+// O proxy guarda a credencial de conta de serviço em segurança e troca por
+// um token OAuth2 - algo que não pode ser feito com segurança no navegador.
+const PROXY_ENDPOINT = "https://mills-gemini-proxy.vercel.app/api/extract";
+const PROXY_SECRET = import.meta.env.VITE_GEMINI_PROXY_SECRET;
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -70,40 +69,35 @@ function parseJsonResponse(rawText) {
 }
 
 /**
- * Envia um arquivo (PDF/PNG/JPG) pro Gemini e recebe de volta a classificação sugerida.
- * Nunca salva nada sozinho — quem decide e confirma é o analista, na tela de upload.
+ * Envia um arquivo (PDF/PNG/JPG) pro proxy (que fala com o Gemini em nome do
+ * app) e recebe de volta a classificação sugerida. Nunca salva nada sozinho —
+ * quem decide e confirma é o analista, na tela de upload.
  */
 export async function extractDocumentMetadata(file) {
-  if (!API_KEY) {
+  if (!PROXY_SECRET) {
     throw new Error(
-      "VITE_GEMINI_API_KEY não configurada. Adicione sua chave gratuita do Google AI Studio no .env."
+      "VITE_GEMINI_PROXY_SECRET não configurada. Adicione o mesmo segredo configurado no proxy Vercel."
     );
   }
 
   const base64Data = await fileToBase64(file);
 
-  const response = await fetch(GEMINI_ENDPOINT, {
+  const response = await fetch(PROXY_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": API_KEY,
+      "x-proxy-secret": PROXY_SECRET,
     },
     body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: buildPrompt() },
-            { inlineData: { mimeType: getMimeType(file), data: base64Data } },
-          ],
-        },
-      ],
-      generationConfig: { temperature: 0.1 },
+      mimeType: getMimeType(file),
+      base64Data,
+      prompt: buildPrompt(),
     }),
   });
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Erro na API do Gemini (${response.status}): ${errBody.slice(0, 200)}`);
+    throw new Error(`Erro no proxy/Gemini (${response.status}): ${errBody.slice(0, 200)}`);
   }
 
   const data = await response.json();
