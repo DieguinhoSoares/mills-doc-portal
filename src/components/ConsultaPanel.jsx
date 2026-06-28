@@ -17,7 +17,6 @@ async function downloadAssetFolderAsZip(asset, documents) {
         : new Blob([`Conteúdo de exemplo para ${doc.fileName}`], { type: "text/plain" });
       folder.file(doc.fileName, blob);
     } catch (err) {
-      // não trava o zip inteiro por causa de um arquivo só; registra e segue
       folder.file(`ERRO_${doc.fileName}.txt`, `Falha ao baixar este arquivo: ${err.message}`);
     }
   }
