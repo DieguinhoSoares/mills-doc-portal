@@ -30,6 +30,19 @@ async function downloadAssetFolderAsZip(asset, documents) {
   URL.revokeObjectURL(url);
 }
 
+function groupByCategoryLatestFirst(documents) {
+  const byCategory = {};
+  documents.forEach((doc) => {
+    if (!byCategory[doc.categoryId]) byCategory[doc.categoryId] = [];
+    byCategory[doc.categoryId].push(doc);
+  });
+
+  return Object.entries(byCategory).map(([categoryId, docs]) => {
+    const sorted = [...docs].sort((a, b) => (b.year || 0) - (a.year || 0));
+    return { categoryId, latest: sorted[0], older: sorted.slice(1) };
+  });
+}
+
 export default function ConsultaPanel() {
   const [search, setSearch] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState(null);
@@ -37,6 +50,7 @@ export default function ConsultaPanel() {
   const [documentsByAssetId, setDocumentsByAssetId] = useState({});
   const [loading, setLoading] = useState(true);
   const [zipLoading, setZipLoading] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +75,7 @@ export default function ConsultaPanel() {
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
   const documents = selectedAssetId ? documentsByAssetId[selectedAssetId] || [] : [];
+  const grouped = useMemo(() => groupByCategoryLatestFirst(documents), [documents]);
 
   if (loading) return <div className="empty-state">Carregando ativos...</div>;
 
@@ -135,18 +150,52 @@ export default function ConsultaPanel() {
             </button>
           </div>
 
-          {documents.length === 0 ? (
+          {grouped.length === 0 ? (
             <div className="empty-state">Nenhum documento cadastrado para este ativo ainda.</div>
           ) : (
             <div>
-              {documents.map((doc, idx) => {
-                const cat = getCategoryById(doc.categoryId);
+              {grouped.map(({ categoryId, latest, older }) => {
+                const cat = getCategoryById(categoryId);
+                const isExpanded = expandedCategory === categoryId;
                 return (
-                  <div key={idx} className="doc-pill">
-                    📄 {cat?.label || doc.categoryId} ({doc.year || "—"}) — {doc.fileName}
-                    <a href={doc.fileUrl} download style={{ marginLeft: 8, color: "var(--mills-laranja)" }}>
-                      Baixar
-                    </a>
+                  <div key={categoryId} style={{ marginBottom: 8 }}>
+                    <div className="doc-pill" style={{ cursor: "default" }}>
+                      📄 {cat?.label || categoryId} ({latest.year || "—"}) — {latest.fileName}
+                      
+                        href={latest.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ marginLeft: 8, color: "var(--mills-laranja)" }}
+                      >
+                        Baixar
+                      </a>
+                      {older.length > 0 && (
+                        <button
+                          className="btn secondary"
+                          style={{ marginLeft: 8, padding: "2px 8px", fontSize: 12 }}
+                          onClick={() => setExpandedCategory(isExpanded ? null : categoryId)}
+                        >
+                          {isExpanded ? "Ocultar" : `+${older.length} versão(ões) anterior(es)`}
+                        </button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div style={{ marginLeft: 24 }}>
+                        {older.map((doc, idx) => (
+                          <div key={idx} className="doc-pill" style={{ opacity: 0.75 }}>
+                            📄 {cat?.label || categoryId} ({doc.year || "—"}) — {doc.fileName}
+                            
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ marginLeft: 8, color: "var(--mills-laranja)" }}
+                            >
+                              Baixar
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
