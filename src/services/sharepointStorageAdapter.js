@@ -37,15 +37,9 @@ async function uploadSmallFile(token, fullPath, file) {
     const errBody = await response.text();
     throw new Error(`Falha ao enviar pro SharePoint (${response.status}): ${errBody.slice(0, 200)}`);
   }
-  return response.json(); // contém id, webUrl, @microsoft.graph.downloadUrl, etc.
+  return response.json();
 }
 
-/**
- * Interface comum aos dois adapters (ver firebaseStorageAdapter.js):
- *   - uploadFile({ file, placaOuTag, categoryId, year }) => { fileUrl, storagePath }
- *   - fetchFileBlob(doc) => Blob
- *   - deleteFile(doc) => void
- */
 export const sharepointStorageAdapter = {
   name: "sharepoint",
 
