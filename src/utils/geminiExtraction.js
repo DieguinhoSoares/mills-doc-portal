@@ -101,8 +101,10 @@ export async function extractDocumentMetadata(file) {
   }
 
   const data = await response.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error("Resposta vazia da IA.");
+const rawText = data?.choices?.[0]?.message?.content;
+if (!rawText) {
+  throw new Error(`Resposta vazia da IA. Resposta completa recebida: ${JSON.stringify(data).slice(0, 500)}`);
+  }
 
   const parsed = parseJsonResponse(rawText);
 
