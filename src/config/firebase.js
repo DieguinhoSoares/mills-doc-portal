@@ -1,11 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
-// Preencha com as credenciais do projeto Firebase (Console → Configurações do projeto).
-// Nunca commitar estes valores em repositório público — use variáveis de ambiente (.env)
-// e adicione .env ao .gitignore, como nos outros projetos (mills-logistica, mills-reposicao).
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -15,10 +12,6 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Sem isso, o getAuth()/getFirestore() do Firebase quebram a aplicação inteira
-// na hora de carregar (mesmo em tela em branco) quando o .env ainda não foi
-// preenchido — é exatamente o que faz o portal funcionar em modo demonstração
-// antes de você ter um projeto Firebase real configurado.
 const isConfigured = Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
 
 let app = null;
@@ -28,7 +21,12 @@ let storage = null;
 
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
+  // experimentalForceLongPolling evita o erro "client is offline" em redes
+  // corporativas/proxy que bloqueiam o streaming padrão do Firestore.
+  db = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+    useFetchStreams: false,
+  });
   auth = getAuth(app);
   storage = getStorage(app);
 }
