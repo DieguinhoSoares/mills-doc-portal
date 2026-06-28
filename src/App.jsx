@@ -21,10 +21,21 @@ function GateScreen({ title, message, showLogout }) {
 }
 
 function AppContent() {
-  const { user, loading, isMaster, isGestor, isAnalista, isAprovado, isPendente, isBloqueado, logout } = useAuth();
+  const { user, loading, authError, isMaster, isGestor, isAnalista, isAprovado, isPendente, isBloqueado, logout } = useAuth();
   const [activeTab, setActiveTab] = useState("consulta");
 
   if (loading) return <div className="empty-state">Carregando...</div>;
+
+  if (authError && !user) {
+    return (
+      <GateScreen
+        title="Erro ao carregar seu acesso"
+        message={authError}
+        showLogout
+      />
+    );
+  }
+
   if (!user) return <LoginScreen />;
 
   if (isPendente) {
