@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { parseSimCsv } from "../utils/simCsvImport";
-import { bulkUpsertAssetsFromSim, deleteAllSimImportedAssets } from "../services/firestoreService";
-import { isBackendConfigured } from "../services/dataSource";
+import { reimportFromSim } from "../services/firestoreService";
+import { isBackendConfigured, invalidarCache } from "../services/dataSource";
 
 export default function ImportSimPanel() {
   const inputRef = useRef(null);
@@ -54,22 +54,17 @@ export default function ImportSimPanel() {
         return;
       }
 
-      if (limparAntes) {
-        setLimpando(true);
-        setProgress({ feito: 0, total: 1, etapa: "limpando" });
-        await deleteAllSimImportedAssets((feito, total) =>
-          setProgress({ feito, total, etapa: "limpando" })
-        );
-        setLimpando(false);
-      }
-
-      setProgress({ feito: 0, total: records.length, etapa: "importando" });
-      const res = await bulkUpsertAssetsFromSim(records, (feito, total) =>
-        setProgress({ feito, total, etapa: "importando" })
+      // reimportFromSim lê a coleção de ativos UMA VEZ SÓ (não duas), mesmo
+      // quando "limpar antes" está marcado - economiza cota de leitura.
+      const res = await reimportFromSim(
+        records,
+        { limparAntes },
+        (feito, total, etapa) => setProgress({ feito, total, etapa })
       );
       setResult(res);
       setRecords(null);
       setPreview(null);
+      invalidarCache(); // próxima vez que abrir Consulta/Gestão, busca dados frescos
     } catch (err) {
       setError(err.message);
     } finally {

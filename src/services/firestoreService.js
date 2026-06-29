@@ -163,9 +163,15 @@ export async function upsertAssetFromSim(record) {
  * SIM. Usar placaOuTag como chave principal foi o que causou duplicados
  * antes - ele é recalculado conforme a regra de exibição muda, então não é
  * estável o suficiente pra identificar "é o mesmo ativo de antes".
+ *
+ * `assetsJaCarregados` é opcional - se já tiver a lista (ex: vindo de um
+ * fluxo que combina limpeza + importação numa única leitura), passa aqui
+ * pra evitar ler a coleção inteira de novo. Cada documento lido conta pra
+ * cota diária gratuita do Firestore (50 mil leituras/dia) - com a frota na
+ * faixa de milhares, reler sem necessidade gasta cota rápido.
  */
-export async function bulkUpsertAssetsFromSim(records, onProgress) {
-  const allAssets = await listAssets();
+export async function bulkUpsertAssetsFromSim(records, onProgress, assetsJaCarregados) {
+  const allAssets = assetsJaCarregados || (await listAssets());
   const byCodigoAtivo = new Map(
     allAssets.filter((a) => a.codigoAtivo).map((a) => [a.codigoAtivo, a])
   );
@@ -225,8 +231,8 @@ export async function bulkUpsertAssetsFromSim(records, onProgress) {
  * acumulados de versões anteriores da importação. Não toca em ativos criados
  * manualmente pelo Upload (sem familia).
  */
-export async function deleteAllSimImportedAssets(onProgress) {
-  const allAssets = await listAssets();
+export async function deleteAllSimImportedAssets(onProgress, assetsJaCarregados) {
+  const allAssets = assetsJaCarregados || (await listAssets());
   const simAssets = allAssets.filter((a) => a.familia);
   const BATCH_SIZE = 450;
 
@@ -239,6 +245,32 @@ export async function deleteAllSimImportedAssets(onProgress) {
   }
 
   return { apagados: simAssets.length };
+}
+
+/**
+ * Fluxo combinado: lê a coleção de ativos UMA VEZ SÓ, e usa essa mesma lista
+ * tanto pra limpeza (se pedida) quanto pra importação - evita o desperdício
+ * de ler a coleção inteira duas vezes na mesma operação.
+ */
+export async function reimportFromSim(records, { limparAntes }, onProgress) {
+  const allAssets = await listAssets();
+
+  let assetsRestantes = allAssets;
+  if (limparAntes) {
+    if (onProgress) onProgress(0, 1, "limpando");
+    await deleteAllSimImportedAssets(
+      (feito, total) => onProgress && onProgress(feito, total, "limpando"),
+      allAssets
+    );
+    // os que sobraram (não vieram do SIM) continuam válidos pra combinar
+    assetsRestantes = allAssets.filter((a) => !a.familia);
+  }
+
+  return bulkUpsertAssetsFromSim(
+    records,
+    (feito, total) => onProgress && onProgress(feito, total, "importando"),
+    assetsRestantes
+  );
 }
 
 /**
