@@ -154,13 +154,22 @@ export async function upsertAssetFromSim(record) {
 
 /**
  * Importação do CSV do SIM (semanal), em LOTES via writeBatch - muito mais
- * rápido que gravar registro por registro (3.372 linhas em sequência levava
- * minutos; em lotes de até 450, leva segundos).
+ * rápido que gravar registro por registro.
  * Busca todos os ativos UMA VEZ no início, em vez de uma consulta por linha.
+ *
+ * Chave de combinação: Código ativo (campo fixo do SIM, nunca muda) é a
+ * referência principal. placaOuTag só serve de fallback pra ativos criados
+ * manualmente pelo Upload, que ainda não passaram por nenhuma importação do
+ * SIM. Usar placaOuTag como chave principal foi o que causou duplicados
+ * antes - ele é recalculado conforme a regra de exibição muda, então não é
+ * estável o suficiente pra identificar "é o mesmo ativo de antes".
  */
 export async function bulkUpsertAssetsFromSim(records, onProgress) {
   const allAssets = await listAssets();
-  const byPlaca = new Map(allAssets.map((a) => [a.placaOuTag, a]));
+  const byCodigoAtivo = new Map(
+    allAssets.filter((a) => a.codigoAtivo).map((a) => [a.codigoAtivo, a])
+  );
+  const byPlacaOuTag = new Map(allAssets.map((a) => [a.placaOuTag, a]));
 
   const results = { criados: 0, atualizados: 0, erros: [] };
   const BATCH_SIZE = 450; // margem de segurança abaixo do limite de 500 do Firestore
@@ -170,7 +179,10 @@ export async function bulkUpsertAssetsFromSim(records, onProgress) {
     const batch = writeBatch(db);
 
     chunk.forEach((record) => {
-      const existing = byPlaca.get(record.placaOuTag);
+      const existing =
+        (record.codigoAtivo && byCodigoAtivo.get(record.codigoAtivo)) ||
+        byPlacaOuTag.get(record.placaOuTag);
+
       const dadosSim = {
         placaOuTag: record.placaOuTag,
         placa: record.placa || "",
@@ -205,6 +217,28 @@ export async function bulkUpsertAssetsFromSim(records, onProgress) {
   }
 
   return results;
+}
+
+/**
+ * Apaga todos os ativos que vieram de uma importação do SIM (têm o campo
+ * `familia` preenchido) - usado pra "começar do zero" e eliminar duplicados
+ * acumulados de versões anteriores da importação. Não toca em ativos criados
+ * manualmente pelo Upload (sem familia).
+ */
+export async function deleteAllSimImportedAssets(onProgress) {
+  const allAssets = await listAssets();
+  const simAssets = allAssets.filter((a) => a.familia);
+  const BATCH_SIZE = 450;
+
+  for (let i = 0; i < simAssets.length; i += BATCH_SIZE) {
+    const chunk = simAssets.slice(i, i + BATCH_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((a) => batch.delete(doc(db, "assets", a.id)));
+    await batch.commit();
+    if (onProgress) onProgress(Math.min(i + BATCH_SIZE, simAssets.length), simAssets.length);
+  }
+
+  return { apagados: simAssets.length };
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { parseSimCsv } from "../utils/simCsvImport";
-import { bulkUpsertAssetsFromSim } from "../services/firestoreService";
+import { bulkUpsertAssetsFromSim, deleteAllSimImportedAssets } from "../services/firestoreService";
 import { isBackendConfigured } from "../services/dataSource";
 
 export default function ImportSimPanel() {
@@ -11,6 +11,8 @@ export default function ImportSimPanel() {
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [limparAntes, setLimparAntes] = useState(false);
+  const [limpando, setLimpando] = useState(false);
 
   async function handleFile(file) {
     setError(null);
@@ -46,14 +48,24 @@ export default function ImportSimPanel() {
     if (!records) return;
     setImporting(true);
     setError(null);
-    setProgress({ feito: 0, total: records.length });
     try {
       if (!isBackendConfigured) {
         setResult({ criados: 0, atualizados: 0, erros: [], demo: true });
         return;
       }
+
+      if (limparAntes) {
+        setLimpando(true);
+        setProgress({ feito: 0, total: 1, etapa: "limpando" });
+        await deleteAllSimImportedAssets((feito, total) =>
+          setProgress({ feito, total, etapa: "limpando" })
+        );
+        setLimpando(false);
+      }
+
+      setProgress({ feito: 0, total: records.length, etapa: "importando" });
       const res = await bulkUpsertAssetsFromSim(records, (feito, total) =>
-        setProgress({ feito, total })
+        setProgress({ feito, total, etapa: "importando" })
       );
       setResult(res);
       setRecords(null);
@@ -62,6 +74,7 @@ export default function ImportSimPanel() {
       setError(err.message);
     } finally {
       setImporting(false);
+      setLimpando(false);
       setProgress(null);
     }
   }
@@ -112,6 +125,15 @@ export default function ImportSimPanel() {
         <div style={{ background: "white", padding: 16, borderRadius: 8, boxShadow: "var(--shadow-card)", marginBottom: 16 }}>
           <p><strong>{preview.total}</strong> registros lidos do CSV.</p>
           <p><strong>{preview.arquivar}</strong> serão arquivados (vendido/sinistrado/devolvido).</p>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={limparAntes}
+              onChange={(e) => setLimparAntes(e.target.checked)}
+            />
+            Apagar todos os ativos de importações anteriores antes de importar (elimina
+            duplicados acumulados - não afeta ativos criados manualmente pelo Upload)
+          </label>
           {preview.familiasDesconhecidas.length > 0 && (
             <p style={{ color: "var(--status-vencendo)" }}>
               ⚠️ {preview.familiasDesconhecidas.length} família(s) sem mapeamento de documentos
@@ -122,7 +144,9 @@ export default function ImportSimPanel() {
           <button className="btn" onClick={handleConfirm} disabled={importing}>
             {importing
               ? progress
-                ? `Importando... ${progress.feito}/${progress.total}`
+                ? progress.etapa === "limpando"
+                  ? `Apagando ativos antigos... ${progress.feito}/${progress.total}`
+                  : `Importando... ${progress.feito}/${progress.total}`
                 : "Importando..."
               : "Confirmar importação"}
           </button>
