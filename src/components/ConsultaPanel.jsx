@@ -73,17 +73,19 @@ export default function ConsultaPanel() {
     return () => { cancelled = true; };
   }, []);
 
-  const filteredAssets = useMemo(
-    () =>
-      assets.filter((a) => {
-        const term = search.toLowerCase();
-        return (
+  const filteredAssets = useMemo(() => {
+    const term = search.toLowerCase().trim();
+    // Com a frota na faixa de milhares, não renderiza a lista inteira sem
+    // busca - isso sozinho deixava a tela pesada, independente da rede.
+    if (term.length < 2) return [];
+    return assets
+      .filter(
+        (a) =>
           a.placaOuTag.toLowerCase().includes(term) ||
           (a.numeroFrota || "").toLowerCase().includes(term)
-        );
-      }),
-    [assets, search]
-  );
+      )
+      .slice(0, 100); // mostra só os 100 primeiros resultados - refine a busca se precisar de outro
+  }, [assets, search]);
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
   const documents = selectedAssetId ? documentsByAssetId[selectedAssetId] || [] : [];
@@ -108,37 +110,52 @@ export default function ConsultaPanel() {
       </div>
 
       {!selectedAssetId && (
-        <table className="asset-table">
-          <thead>
-            <tr>
-              <th>Placa</th>
-              <th>Nº Frota</th>
-              <th>Subtipo</th>
-              <th>Célula</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAssets.map((a) => (
-              <tr key={a.id}>
-                <td><strong>{a.placa !== undefined ? (a.placa || "—") : a.placaOuTag}</strong></td>
-                <td>{a.numeroFrota || "—"}</td>
-                <td>{a.familia || ASSET_TYPE_LABELS[a.assetType] || "—"}</td>
-                <td>{a.cell}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => setSelectedAssetId(a.id)}>
-                    Ver documentos
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filteredAssets.length === 0 && (
-              <tr>
-                <td colSpan={5} className="empty-state">Nenhum ativo encontrado para essa busca.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <>
+          {search.trim().length < 2 ? (
+            <div className="empty-state">
+              Digite pelo menos 2 caracteres pra buscar entre os {assets.length} ativos da frota.
+            </div>
+          ) : (
+            <table className="asset-table">
+              <thead>
+                <tr>
+                  <th>Placa</th>
+                  <th>Nº Frota</th>
+                  <th>Subtipo</th>
+                  <th>Célula</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAssets.map((a) => (
+                  <tr key={a.id}>
+                    <td><strong>{a.placa !== undefined ? (a.placa || "—") : a.placaOuTag}</strong></td>
+                    <td>{a.numeroFrota || "—"}</td>
+                    <td>{a.familia || ASSET_TYPE_LABELS[a.assetType] || "—"}</td>
+                    <td>{a.cell}</td>
+                    <td>
+                      <button className="btn secondary" onClick={() => setSelectedAssetId(a.id)}>
+                        Ver documentos
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredAssets.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="empty-state">Nenhum ativo encontrado para essa busca.</td>
+                  </tr>
+                )}
+                {filteredAssets.length === 100 && (
+                  <tr>
+                    <td colSpan={5} className="empty-state">
+                      Mostrando os 100 primeiros resultados - refine a busca pra ver outros.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </>
       )}
 
       {selectedAsset && (

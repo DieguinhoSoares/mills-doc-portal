@@ -3,7 +3,7 @@ import { extractDocumentMetadata } from "../utils/geminiExtraction";
 import { DOCUMENT_CATEGORIES, ASSET_TYPE_LABELS, ASSET_TYPES, getCategoryById } from "../config/categories";
 import { calcularVencimentoLicenciamento, ESTADOS_BR } from "../config/calendarioLicenciamento";
 import { mockAssets } from "../data/mockData";
-import { isBackendConfigured } from "../services/dataSource";
+import { isBackendConfigured, invalidarCache } from "../services/dataSource";
 import { findAssetByPlaca, createAsset, saveDocumentMetadata } from "../services/firestoreService";
 import { storageAdapter } from "../services/storageAdapter";
 import { useAuth } from "../contexts/AuthContext";
@@ -14,7 +14,7 @@ const MAX_FILE_MB = 15;
 const STATUS = {
   PENDING: "pending",
   EXTRACTING: "extracting",
-  READY: "ready",
+  READY: "ready", // extração concluída, esperando confirmação do analista
   SAVING: "saving",
   ERROR: "error",
   SAVED: "saved",
@@ -26,7 +26,7 @@ function makeId() {
 
 export default function UploadPanel() {
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState([]); // { id, file, status, extraction, override, errorMsg }
   const inputRef = useRef(null);
 
   function validateFile(file) {
@@ -70,6 +70,9 @@ export default function UploadPanel() {
           const isCrlv = extraction.categoryId === "crlv";
           const uf = extraction.ufRegistro || "";
           const assetType = extraction.assetTypeGuess || "";
+          // Para CRLV, a "validade" não vem do documento - é calculada pelo
+          // calendário de licenciamento do estado. Para as demais categorias,
+          // usa a data que a IA extraiu de fato do documento.
           const validUntilCalculado = isCrlv
             ? calcularVencimentoLicenciamento({
                 uf,
@@ -94,6 +97,29 @@ export default function UploadPanel() {
           };
         })
       );
+
+      // Confronta o que a IA leu no documento com o que já está cadastrado
+      // no SIM pra essa placa - pega erro humano (documento subido pro
+      // ativo errado, ou tipo divergente do que está no cadastro).
+      if (isBackendConfigured && extraction.placaOuTag) {
+        try {
+          const existing = await findAssetByPlaca(extraction.placaOuTag);
+          if (existing && extraction.assetTypeGuess && existing.assetType !== extraction.assetTypeGuess) {
+            setItems((prev) =>
+              prev.map((i) =>
+                i.id === id
+                  ? {
+                      ...i,
+                      conflito: `Atenção: o documento parece ser de um(a) ${ASSET_TYPE_LABELS[extraction.assetTypeGuess]}, mas a placa ${extraction.placaOuTag} está cadastrada no SIM como ${existing.familia || ASSET_TYPE_LABELS[existing.assetType]}. Confira se é o documento certo antes de salvar.`,
+                    }
+                  : i
+              )
+            );
+          }
+        } catch {
+          // não bloqueia o fluxo se a verificação falhar - só não avisa
+        }
+      }
     } catch (err) {
       setItems((prev) =>
         prev.map((i) =>
@@ -109,6 +135,8 @@ export default function UploadPanel() {
         if (i.id !== id) return i;
         const novoOverride = { ...i.override, [field]: value };
 
+        // Se for CRLV e o campo alterado afeta o cálculo (UF, ano ou placa),
+        // recalcula a validade pelo calendário em vez de deixar o valor antigo.
         const camposQueAfetamCalculo = ["uf", "year", "placaOuTag", "categoryId", "assetType"];
         if (novoOverride.categoryId === "crlv" && camposQueAfetamCalculo.includes(field)) {
           novoOverride.validUntil =
@@ -132,6 +160,7 @@ export default function UploadPanel() {
 
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: STATUS.SAVING } : i)));
 
+    // Modo demonstração: sem Firebase configurado, só valida o fluxo de confirmação.
     if (!isBackendConfigured) {
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: STATUS.SAVED } : i)));
       return;
@@ -173,6 +202,7 @@ export default function UploadPanel() {
       });
 
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: STATUS.SAVED } : i)));
+      invalidarCache(); // sem isso, Consulta/Gestão mostrariam dado velho por até 3 minutos
     } catch (err) {
       setItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, status: STATUS.ERROR, errorMsg: err.message } : i))
@@ -244,7 +274,7 @@ export default function UploadPanel() {
 }
 
 function UploadItemCard({ item, onUpdate, onConfirm, onDiscard }) {
-  const { file, status, extraction, errorMsg, override } = item;
+  const { file, status, extraction, errorMsg, override, conflito } = item;
 
   return (
     <div
@@ -267,6 +297,12 @@ function UploadItemCard({ item, onUpdate, onConfirm, onDiscard }) {
 
       {status === STATUS.ERROR && (
         <p style={{ color: "var(--status-vencido)", fontSize: 13 }}>{errorMsg}</p>
+      )}
+
+      {conflito && (
+        <p style={{ color: "var(--status-vencendo)", fontSize: 13, background: "#fdf3df", padding: 8, borderRadius: 6 }}>
+          ⚠️ {conflito}
+        </p>
       )}
 
       {(status === STATUS.READY || status === STATUS.SAVING || status === STATUS.SAVED || status === STATUS.ERROR) && override.placaOuTag !== undefined && (

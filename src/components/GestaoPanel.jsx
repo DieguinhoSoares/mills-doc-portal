@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildFleetAlertSummary, ALERT_STATUS } from "../utils/alertEngine";
-import { getAssets, getDocumentsByAssetId, isBackendConfigured } from "../services/dataSource";
+import { getAssets, getDocumentsByAssetId, isBackendConfigured, invalidarCache } from "../services/dataSource";
 import { ASSET_TYPE_LABELS, DOCUMENT_CATEGORIES, getRequiredCategories } from "../config/categories";
 import { updateAsset } from "../services/firestoreService";
 import ImportSimPanel from "./ImportSimPanel";
@@ -25,6 +25,9 @@ const STATUS_BADGE_CLASS = {
 
 export default function GestaoPanel() {
   const [filterCell, setFilterCell] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const TAMANHO_PAGINA = 50;
   const [assets, setAssets] = useState([]);
   const [documentsByAssetId, setDocumentsByAssetId] = useState({});
   const [loading, setLoading] = useState(true);
@@ -61,9 +64,24 @@ export default function GestaoPanel() {
   if (loading) return <div className="empty-state">Carregando dados da frota...</div>;
   if (error) return <div className="empty-state">Erro ao carregar dados: {error}</div>;
 
-  const filteredDetail = filterCell
-    ? detail.filter((d) => d.asset.cell === filterCell)
-    : detail;
+  const filteredDetail = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return detail.filter((d) => {
+      const passaCelula = !filterCell || d.asset.cell === filterCell;
+      const passaBusca =
+        !term ||
+        d.asset.placaOuTag.toLowerCase().includes(term) ||
+        (d.asset.numeroFrota || "").toLowerCase().includes(term);
+      return passaCelula && passaBusca;
+    });
+  }, [detail, filterCell, searchTerm]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filteredDetail.length / TAMANHO_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const detailPaginado = filteredDetail.slice(
+    (paginaAtual - 1) * TAMANHO_PAGINA,
+    paginaAtual * TAMANHO_PAGINA
+  );
 
   const cells = [...new Set(assets.map((a) => a.cell).filter(Boolean))];
 
@@ -115,7 +133,21 @@ export default function GestaoPanel() {
       </div>
 
       <div className="search-bar">
-        <select value={filterCell} onChange={(e) => setFilterCell(e.target.value)}>
+        <input
+          placeholder="Buscar por placa ou número de frota..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPagina(1);
+          }}
+        />
+        <select
+          value={filterCell}
+          onChange={(e) => {
+            setFilterCell(e.target.value);
+            setPagina(1);
+          }}
+        >
           <option value="">Todas as células</option>
           {cells.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -144,7 +176,7 @@ export default function GestaoPanel() {
           </tr>
         </thead>
         <tbody>
-          {filteredDetail.map(({ asset, panel }) => {
+          {detailPaginado.map(({ asset, panel }) => {
             const pendencias = panel.filter((p) => p.status !== ALERT_STATUS.OK);
             return (
               <tr key={asset.id} style={asset.arquivado ? { opacity: 0.5 } : undefined}>
@@ -180,6 +212,28 @@ export default function GestaoPanel() {
           })}
         </tbody>
       </table>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+        <span style={{ fontSize: 13, color: "#777" }}>
+          {filteredDetail.length} ativo(s) - página {paginaAtual} de {totalPaginas}
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn secondary"
+            onClick={() => setPagina((p) => Math.max(1, p - 1))}
+            disabled={paginaAtual <= 1}
+          >
+            ← Anterior
+          </button>
+          <button
+            className="btn secondary"
+            onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+            disabled={paginaAtual >= totalPaginas}
+          >
+            Próxima →
+          </button>
+        </div>
+      </div>
 
       <p style={{ fontSize: 12, color: "#999", marginTop: 8 }}>
         IPVA e Licenciamento sem documento próprio, mas com CRLV confirmado do mesmo
@@ -239,6 +293,7 @@ function ExceptionEditor({ asset, onClose, onSaved }) {
           adicionar: [...adicionadas],
         },
       });
+      invalidarCache(); // sem isso, a tela mostrava dado velho por até 3 minutos
       onSaved();
       onClose();
     } finally {
