@@ -61,9 +61,6 @@ export default function GestaoPanel() {
     [assets, documentsByAssetId]
   );
 
-  if (loading) return <div className="empty-state">Carregando dados da frota...</div>;
-  if (error) return <div className="empty-state">Erro ao carregar dados: {error}</div>;
-
   const filteredDetail = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     return detail.filter((d) => {
@@ -75,6 +72,9 @@ export default function GestaoPanel() {
       return passaCelula && passaBusca;
     });
   }, [detail, filterCell, searchTerm]);
+
+  if (loading) return <div className="empty-state">Carregando dados da frota...</div>;
+  if (error) return <div className="empty-state">Erro ao carregar dados: {error}</div>;
 
   const totalPaginas = Math.max(1, Math.ceil(filteredDetail.length / TAMANHO_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
